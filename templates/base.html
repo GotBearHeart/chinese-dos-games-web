@@ -30,6 +30,7 @@
         <div class="navbar-nav mr-auto">
             <a class="nav-item nav-link" href="{{ url_for('index') }}">首页</a>
             <a class="nav-item nav-link" href="{{ url_for('games') }}">游戏列表</a>
+            <a class="nav-item nav-link" href="{{ url_for('favorites') }}">⭐ 我的收藏</a>
             <a class="nav-item nav-link" href="{{ url_for('about') }}">关于</a>
         </div>
         <form class="form-inline my-2 my-lg-0" method="get" action="{{ url_for('search') }}">

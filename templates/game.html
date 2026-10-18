@@ -14,6 +14,7 @@
                         <div>
                             <h5 class="card-title game-title">{{ game_info["name"]["zh-Hans"] }}</h5>
                             <div id='controls'>
+                                <span><input id="favorite_btn" class="btn {% if is_favorite %}btn-warning text-dark font-weight-bold{% else %}btn-outline-warning{% endif %}" type="button" value="{% if is_favorite %}★ 已收藏{% else %}☆ 收藏{% endif %}" onclick="toggleFavoriteGame();" title="收藏此游戏至我的收藏"></span>
                                 <span><input class="btn btn-light" type="button" value="网页全屏"
                                              onclick="htmlFullscreen();"></span>
                                 <span><input class="btn btn-light" type="button" value="全屏游戏"
@@ -88,6 +89,36 @@
             else {
                 return "{{ url_for('static', filename='emularity/dosbox/dosbox-sync.mem') }}" + filename;
             }
+        }
+    
+        function toggleFavoriteGame() {
+            var btn = document.getElementById('favorite_btn');
+            if (!btn) return;
+            btn.disabled = true;
+            var gameId = {{ game_info['identifier'] | tojson }};
+            
+            fetch('/api/favorites/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier: gameId })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                btn.disabled = false;
+                if (data && data.success) {
+                    if (data.is_favorite) {
+                        btn.value = '★ 已收藏';
+                        btn.className = 'btn btn-warning text-dark font-weight-bold';
+                    } else {
+                        btn.value = '☆ 收藏';
+                        btn.className = 'btn btn-outline-warning';
+                    }
+                }
+            })
+            .catch(function(err) {
+                btn.disabled = false;
+                console.error('Failed to toggle favorite:', err);
+            });
         }
     </script>
     <script src="{{ url_for('static', filename='js/game.js') }}"></script>
