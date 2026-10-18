@@ -9,15 +9,18 @@
                 <div class="card mb-3">
                     <div id="screen_container">
                         <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+                        <div id="crt_overlay" class="crt-overlay crt-active"></div>
                     </div>
                     <div class="card-body">
                         <div>
                             <h5 class="card-title game-title">{{ game_info["name"]["zh-Hans"] }}</h5>
                             <div id='controls'>
+                                <span><input id="crt_toggle_btn" class="btn btn-info" type="button" value="CRT 滤镜: 开"
+                                             onclick="toggleCRT();"></span>
                                 <span><input class="btn btn-light" type="button" value="网页全屏"
                                              onclick="htmlFullscreen();"></span>
                                 <span><input class="btn btn-light" type="button" value="全屏游戏"
-                                             onclick="emulator.requestFullScreen();"></span>
+                                             onclick="nativeFullscreen();"></span>
                             </div>
                         </div>
                     </div>
@@ -59,7 +62,7 @@
     </div>
 
     <div class="exit_fullscreen" id="exit_button">
-        <input class="btn btn-light" type="button" value="退出" onclick="htmlFullscreen();">
+        <input class="btn btn-light" type="button" value="退出全屏" onclick="exitAllFullscreen();">
     </div>
     <script type="text/javascript" src="{{ url_for('static', filename='emularity/es6-promise.js') }}"></script>
     <script type="text/javascript" src="{{ url_for('static', filename='emularity/browserfs.min.js') }}"></script>
