@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  dosgame:
+    image: ghcr.io/gotbearheart/dosgame:latest
+    container_name: dosgame
+    restart: unless-stopped
+    ports:
+      - "8888:262"
+    environment:
+      - TITLE=Chinese DOS Games
+      - WORKERS=4
+    volumes:
+      # 游戏二进制包存储路径 (放置 ~1898 个 zip 文件)
+      - ./bin:/app/static/games/bin:rw
+      # 游戏封面海报图片路径
+      - ./img:/app/static/games/img:ro
+      # 物理云存档与收藏数据持久化路径
+      - ./saves:/app/saves:rw

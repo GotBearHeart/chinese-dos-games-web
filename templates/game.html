@@ -9,15 +9,21 @@
                 <div class="card mb-3">
                     <div id="screen_container">
                         <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+                        <div id="crt_overlay" class="crt-overlay crt-active"></div>
                     </div>
                     <div class="card-body">
                         <div>
                             <h5 class="card-title game-title">{{ game_info["name"]["zh-Hans"] }}</h5>
                             <div id='controls'>
+                                <span><input id="favorite_btn" class="btn {% if is_favorite %}btn-warning text-dark font-weight-bold{% else %}btn-outline-warning{% endif %}" type="button" value="{% if is_favorite %}★ 已收藏{% else %}☆ 收藏{% endif %}" onclick="toggleFavoriteGame();" title="收藏此游戏至 NAS 我的收藏"></span>
+                                <span><input id="cloud_sync_btn" class="btn btn-outline-success" type="button" value="☁️ 云存档: 就绪"
+                                             onclick="manualSyncSaves();" title="每 180 秒及离开页面时自动同步至 NAS，点击可手动同步"></span>
+                                <span><input id="crt_toggle_btn" class="btn btn-info" type="button" value="CRT 滤镜: 开"
+                                             onclick="toggleCRT();"></span>
                                 <span><input class="btn btn-light" type="button" value="网页全屏"
                                              onclick="htmlFullscreen();"></span>
                                 <span><input class="btn btn-light" type="button" value="全屏游戏"
-                                             onclick="emulator.requestFullScreen();"></span>
+                                             onclick="nativeFullscreen();"></span>
                             </div>
                         </div>
                     </div>
@@ -59,7 +65,7 @@
     </div>
 
     <div class="exit_fullscreen" id="exit_button">
-        <input class="btn btn-light" type="button" value="退出" onclick="htmlFullscreen();">
+        <input class="btn btn-light" type="button" value="退出全屏" onclick="exitAllFullscreen();">
     </div>
     <script type="text/javascript" src="{{ url_for('static', filename='emularity/es6-promise.js') }}"></script>
     <script type="text/javascript" src="{{ url_for('static', filename='emularity/browserfs.min.js') }}"></script>
@@ -89,7 +95,36 @@
                 return "{{ url_for('static', filename='emularity/dosbox/dosbox-sync.mem') }}" + filename;
             }
         }
+
+        function toggleFavoriteGame() {
+            var btn = document.getElementById('favorite_btn');
+            if (!btn) return;
+            btn.disabled = true;
+            var gameId = {{ game_info['identifier'] | tojson }};
+            
+            fetch('/api/favorites/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier: gameId })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                btn.disabled = false;
+                if (data && data.success) {
+                    if (data.is_favorite) {
+                        btn.value = '★ 已收藏';
+                        btn.className = 'btn btn-warning text-dark font-weight-bold';
+                    } else {
+                        btn.value = '☆ 收藏';
+                        btn.className = 'btn btn-outline-warning';
+                    }
+                }
+            })
+            .catch(function(err) {
+                btn.disabled = false;
+                console.error('Failed to toggle favorite:', err);
+            });
+        }
     </script>
     <script src="{{ url_for('static', filename='js/game.js') }}"></script>
 {% endblock %}
-

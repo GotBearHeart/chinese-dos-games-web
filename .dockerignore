@@ -1,0 +1,13 @@
+.git
+.github
+*.pyc
+*.pyo
+__pycache__
+saves/*
+!saves/.gitkeep
+static/games/bin/*
+.vscode
+.idea
+*.log
+Dockerfile*
+docker-compose*.yml
