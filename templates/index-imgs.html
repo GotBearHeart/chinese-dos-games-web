@@ -7,8 +7,10 @@
                 <div class="card grid-item mb-3 mr-3">
                     <a href="{{ url_for('game', identifier=game_info.identifier) }}">
                         <img class="card-img-top"
-                             src="{{ url_for('static', filename='games/img/{}/{}'.format(game_info.identifier, game_info.coverFilename)) }}"
-                             alt="{{ game_info['name']['zh-Hans'] }}">
+                             src="{{ url_for('static', filename='games/img/{}/{}'.format(game_info.identifier, game_info.coverFilename)) if game_info.get('coverFilename') else url_for('static', filename='games/img/default_cover.svg') }}"
+                             alt="{{ game_info['name']['zh-Hans'] }}"
+                             loading="lazy"
+                             onerror="this.onerror=null; this.src='{{ url_for('static', filename='games/img/default_cover.svg') }}';">
                     </a>
                     <div class="card-body">
                         <h5 class="card-title">{{ game_info['name']['zh-Hans'] }}</h5>
