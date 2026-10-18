@@ -14,6 +14,8 @@
                         <div>
                             <h5 class="card-title game-title">{{ game_info["name"]["zh-Hans"] }}</h5>
                             <div id='controls'>
+                                <span><input id="cloud_sync_btn" class="btn btn-outline-success" type="button" value="☁️ 云存档: 就绪"
+                                             onclick="manualSyncSaves();" title="每 180 秒及离开页面时自动同步至 NAS，点击可手动同步"></span>
                                 <span><input class="btn btn-light" type="button" value="网页全屏"
                                              onclick="htmlFullscreen();"></span>
                                 <span><input class="btn btn-light" type="button" value="全屏游戏"

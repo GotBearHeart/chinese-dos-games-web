@@ -215,8 +215,7 @@ var Module = null;
                                              config_args.push(cfgr.model(modulecfg.driver),
                                                               cfgr.rom(modulecfg.bios_filenames));
                                            } else if (module && module.indexOf("pce-") === 0) {
-                                             config_args.push(cfgr.model(modulecfg.driver),
-                                                              cfgr.extraArgs(modulecfg.extra_args));
+                                             config_args.push(cfgr.model(modulecfg.driver));
                                            } else if (module) { // MAME
                                              config_args.push(cfgr.driver(modulecfg.driver),
                                                               cfgr.extraArgs(modulecfg.extra_args));
@@ -295,9 +294,6 @@ var Module = null;
            drives = {}, files = [], wanted_files = [],
            meta = dict_from_xml(metadata);
        files_with_ext_from_filelist(filelist, meta.emulator_ext).forEach(function (file, i) {
-                                                                           wanted_files.push(file.name);
-                                                                         });
-       files_with_ext_from_filelist(filelist, "conf").forEach(function (file, i) {
                                                                            wanted_files.push(file.name);
                                                                          });
        meta_props_matching(meta, /^vice_drive_([89])$/).forEach(function (result) {
@@ -574,7 +570,7 @@ var Module = null;
     */
    function DosBoxLoader() {
      var config = Array.prototype.reduce.call(arguments, extend);
-     config.emulator_arguments = build_dosbox_arguments(config.emulatorStart, config.files, config.extra_dosbox_args, config.images);
+     config.emulator_arguments = build_dosbox_arguments(config.emulatorStart, config.files, config.extra_dosbox_args);
      config.runner = EmscriptenRunner;
      return config;
    }
@@ -587,27 +583,14 @@ var Module = null;
    DosBoxLoader.extraArgs = function (args) {
      return { extra_dosbox_args: args };
    };
-
-   DosBoxLoader.mountZip = function (drive, file, drive_type) {
-     //  driver type: hdd, floppy, cdrom
+   
+   DosBoxLoader.mountZip = function (drive, file, drive_type="hdd") { 
+     //  driver type: hdd, floppy, cdrom, img
      return { files: [{ drive: drive,
                         mountpoint: "/" + drive,
                         file: file,
-                        drive_type: drive_type || "hdd",
+                        drive_type: drive_type,
                       }] };
-   };
-
-   DosBoxLoader.mountImage = function(drive, filepath, drive_type, file_system){
-    // See also https://www.dosbox.com/wiki/IMGMOUNT
-    // drive: the drive to mount
-    // filepath: the location of image file, like "/c/test.iso" NOTE: this depends on the method `DosBoxLoader.mountZip` or `DosBoxLoader.mountFile`
-    // drive_type: floppy, iso, hdd
-    // file_system: iso, fat, none
-    return { images: [{ drive: drive,
-                       filepath: filepath,
-                       drive_type: drive_type,
-                       file_system: file_system
-                     }] };
    };
 
    /**
@@ -619,7 +602,15 @@ var Module = null;
     config.runner = PC98DosBoxRunner;
     return config;
   }
-  PC98DosBoxLoader.__proto__ = DosBoxLoader;
+  PC98DosBoxLoader.__proto__ = BaseLoader;
+
+  PC98DosBoxLoader.startExe = function (path) {
+    return { emulatorStart: path };
+  };
+
+  PC98DosBoxLoader.extraArgs = function (args) {
+    return { extra_dosbox_args: args };
+  };
 
    /**
     * MAMELoader
@@ -732,9 +723,6 @@ var Module = null;
    function PCELoader() {
      var config = Array.prototype.reduce.call(arguments, extend);
      config.emulator_arguments = ["-c", "/emulator/pce-"+ config.pceModel +".cfg"];
-     if (config.extra_pce_args && config.extra_pce_args.length > 0) {
-       config.emulator_arguments = config.emulator_arguments.concat(config.extra_pce_args);
-     }
      config.runner = EmscriptenRunner;
      return config;
    }
@@ -742,10 +730,6 @@ var Module = null;
 
    PCELoader.model = function (model) {
      return { pceModel: model };
-   };
-
-   PCELoader.extraArgs = function (args) {
-     return { extra_pce_args: args };
    };
 
    var build_mame_arguments = function (muted, driver, native_resolution, sample_rate, peripheral, extra_args, keepaspect) {
@@ -781,7 +765,7 @@ var Module = null;
      return args;
    };
 
-   var build_dosbox_arguments = function (emulator_start, files, extra_args, images) {
+   var build_dosbox_arguments = function (emulator_start, files, extra_args) {
      var args = ['-conf', '/emulator/dosbox.conf'];
 
      var len = files.length;
@@ -797,16 +781,11 @@ var Module = null;
          else if(files[i].drive_type==='cdrom'){
           args.push('-c', 'mount '+ files[i].drive +' /emulator'+ files[i].mountpoint + ' -t cdrom');
          }
+         else if(files[i].drive_type==='img'){
+          args.push('-c', 'mount '+ files[i].drive +' /emulator'+ files[i].mountpoint + ' -t iso');
+         }
        }
      }
-
-     if (images){
-      var len = images.length;
-      for (var i = 0; i < len; i++) {
-         //See also https://www.dosbox.com/wiki/IMGMOUNT
-         args.push('-c', 'imgmount ' + images[i].drive + ' /emulator' + images[i].filepath + ' -t ' + images[i].drive_type + ' -fs ' + images[i].file_system);
-        };
-      };
 
      if (extra_args) {
        args = args.concat(extra_args);
@@ -1248,6 +1227,8 @@ var Module = null;
 
                         function finish() {
                           game_data = _game_data;
+                          window._dos_deltaFS = deltaFS;
+                          window._dos_game_key = "fileSystemKey" in _game_data ? _game_data.fileSystemKey : null;
 
                           // Any file system writes to MountableFileSystem will be written to the
                           // deltaFS, letting us mount read-only zip files into the MountableFileSystem
@@ -1305,6 +1286,54 @@ var Module = null;
                                                              return null;
                                                            });
                               // this is kinda wrong; it really only applies when we're loading something created by Emscripten
+                              if (game_data.fileSystemKey && typeof window !== 'undefined' && window.fetch) {
+                                promises.push(
+                                  new Promise(function(resolveCloud) {
+                                    try {
+                                      window.fetch('/api/saves/' + encodeURIComponent(game_data.fileSystemKey))
+                                        .then(function(res) { if (res && res.ok) return res.json(); return null; })
+                                        .then(function(data) {
+                                          if (data && data.success && data.files) {
+                                            var count = 0;
+                                            for (var sp in data.files) {
+                                              if (!data.files.hasOwnProperty(sp)) continue;
+                                              try {
+                                                var bin = window.atob(data.files[sp]);
+                                                var bytes = new Uint8Array(bin.length);
+                                                for (var j = 0; j < bin.length; j++) {
+                                                  bytes[j] = bin.charCodeAt(j);
+                                                }
+                                                var parts = sp.split('/').filter(Boolean);
+                                                var curr = '';
+                                                for (var k = 0; k < parts.length - 1; k++) {
+                                                  curr += '/' + parts[k];
+                                                  try {
+                                                    if (!deltaFS.existsSync(curr)) deltaFS.mkdirSync(curr);
+                                                  } catch (de) {}
+                                                }
+                                                deltaFS.writeFileSync(sp, new Buffer(bytes));
+                                                count++;
+                                              } catch (fe) {
+                                                console.warn('[CloudSave] Error restoring file:', sp, fe);
+                                              }
+                                            }
+                                            if (count > 0) {
+                                              console.log('[CloudSave] Successfully restored ' + count + ' save files from NAS for', game_data.fileSystemKey);
+                                            }
+                                          }
+                                          resolveCloud();
+                                        })
+                                        .catch(function(err) {
+                                          console.warn('[CloudSave] Cloud save fetch error (ignored):', err);
+                                          resolveCloud();
+                                        });
+                                    } catch (outerErr) {
+                                      console.warn('[CloudSave] Outer error (ignored):', outerErr);
+                                      resolveCloud();
+                                    }
+                                  })
+                                );
+                              }
                               if ('emulatorWASM' in game_data && game_data.emulatorWASM && 'WebAssembly' in window) {
                                 promises.push(fetch({ title: "WASM Binary", url: game_data.emulatorWASM }).then(function (data) { game_data.wasmBinary = data; }));
                               }
