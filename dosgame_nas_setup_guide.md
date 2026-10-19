@@ -261,10 +261,11 @@ if (game_data.fileSystemKey) {
 }
 ```
 
-### 3. 智能多触发上传引擎 (`static/js/game.js`)
-* **180 秒智能定时巡检**：以 180 秒为周期对比当前 `deltaFS` 文件指纹，仅在发现增量变动时静默上传。
-* **切页/关页即时保底**：监听 `visibilitychange` 与 `beforeunload`，通过 `keepalive fetch` 零延迟回传。
-* **一键手动同步**：配备【☁️ 云存档: 就绪】操作按钮。
+### 3. 智能多触发上传引擎 (`static/js/game.js` & `static/emularity/loader.js`)
+* **底层写入即时感知 (Debounced FS Hook)**：在 `deltaFS.writeFileSync` 与 `unlinkSync` 植入拦截钩子。当玩家在游戏内点击存盘，系统在 1.5 秒防抖延迟后立即触发无体积限制的常规 `fetch` 上传，秒级落盘 NAS，彻底避免退出时因进程被杀或配额超限导致丢档。
+* **15 秒高速轻量巡检**：以 15 秒为周期快速比对当前 `deltaFS` 文件哈希指纹（CPU 开销 <0.1ms），发现增量变动时静默增量同步。
+* **W3C 64KB 配额防护与退避保底**：针对大体积存档（如《仙剑奇侠传》双存档达 180KB），规避浏览器 `sendBeacon` / `keepalive` 超过 64KB 会被静默丢弃的内核限制，对超出配额的大包安全降级为标准请求。
+* **一键手动同步**：界面保留【☁️ 云存档: 就绪】操作按钮，支持玩家随时手动强制上传。
 
 ---
 
