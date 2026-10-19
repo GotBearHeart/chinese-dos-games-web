@@ -267,6 +267,43 @@ if (game_data.fileSystemKey) {
 * **W3C 64KB 配额防护与退避保底**：针对大体积存档（如《仙剑奇侠传》双存档达 180KB），规避浏览器 `sendBeacon` / `keepalive` 超过 64KB 会被静默丢弃的内核限制，对超出配额的大包安全降级为标准请求。
 * **一键手动同步**：界面保留【☁️ 云存档: 就绪】操作按钮，支持玩家随时手动强制上传。
 
+### 4. 零白名单全格式兼容与 COW 架构机制
+许多玩家可能会疑虑：“近 2000 款 DOS 游戏的存档格式五花八门，系统怎么知道哪个文件是存盘？”  
+答案是：**本架构基于文件系统层（VFS）的“写时复制（COW）”差量捕获，完全无需对任何文件后缀名进行预判或硬编码白名单。**
+
+```mermaid
+graph TD
+    GameZip["原始游戏压缩包 (RO Mount)<br/>只读挂载于 MountableFileSystem"]
+    DeltaFS["可写差量层 (deltaFS / IndexedDB)<br/>仅接管游戏运行期新产生或修改的文件"]
+    
+    DOSBox["DOSBox 模拟器进程 (Emscripten)"]
+    
+    DOSBox -->|只读读取原始资源| GameZip
+    DOSBox -->|写入任何存盘/配置变动| DeltaFS
+    
+    DeltaFS -->|全盘递归扫描 walk('/')| CloudSave["☁️ 云存档引擎<br/>(无视后缀，自动上传所有 Delta 文件)"]
+```
+
+#### 通用兼容特性：
+1. **零后缀预设，无差别捕获**：
+   `loader.js` 的拦截钩子与 `game.js` 的 `collectDeltaFiles` 扫描不设任何正则匹配。不管游戏生成的存档叫 `1.RPG`、`SAVEDATA.DAT`、`GAME.SAV`、`REC.001`，还是纯无后缀文件，都会被百分之百抓取。
+2. **只读层天然阻隔原始资源**：
+   原始游戏包被挂载为只读，`deltaFS` 初始为空白，只有被游戏创建或修改的文件才会存在于 `deltaFS` 中，绝不会误传不需要的游戏静态资源。
+3. **游戏配置跨端自动漫游**：
+   DOS 时代的声卡参数（如 Sound Blaster 16 IRQ/DMA 设置）、按键映射、画质设置在游戏内修改后生成的 `CONFIG.SYS`、`SOUND.CFG`、`SETUP.INI`，同样被视作增量文件自动漫游到 NAS。换到另一台设备玩时，无需再次配置声卡，直接生效。
+
+| 代表游戏 | 实际存档文件名 | 兼容性说明 |
+| :--- | :--- | :--- |
+| **《仙剑奇侠传》** | `1.RPG` ~ `5.RPG` | ✅ 自动识别，即时同步 |
+| **《金庸群侠传》** | `R1.GRP`、`R2.GRP`、`R3.GRP` | ✅ 自动识别，即时同步 |
+| **《三国志英杰传 / 曹操传》** | `SAVEDATA.DAT`、`RECORDS.SAV` | ✅ 自动识别，即时同步 |
+| **《大航海时代 2》** | `SAVEDATA.DAT` | ✅ 自动识别，即时同步 |
+| **《炎龙骑士团 2》** | `FD2_01.SAV` ~ `FD2_10.SAV` | ✅ 自动识别，即时同步 |
+| **《轩辕剑 2 / 枫之舞》** | `SWD2_01.DAT`、`SYS.SAV` | ✅ 自动识别，即时同步 |
+| **《大富翁 3》** | `RICH.DAT`、`SAVE.DAT` | ✅ 自动识别，即时同步 |
+| **《模拟城市 2000》** | `CITY.SC2` | ✅ 自动识别，即时同步 |
+| **各类声卡按键设置** | `SOUND.CFG`、`CONFIG.INI` | ✅ 自动识别，配置随号漫游 |
+
 ---
 
 ## 七、 封面海报全自动补全与海报墙 WebUI 改造
@@ -419,6 +456,7 @@ docker run -d \
 | **报错：Failed to download game data!** | `loader.js` 内部局部函数 `function fetch(file)` 遮蔽了浏览器全局的 `window.fetch`，传入 URL 字符串导致抛出 TypeError 使得 `Promise.all` 异常中断。 | 将调用明确指定为 `window.fetch`，并使用独立 `new Promise(resolveCloud => ...)` 沙箱包裹，保证无论云存档状态如何均必定 resolve，永不阻断游戏主包启动。 |
 | **新加入的 WebP 封面及 games.json 在容器中无法访问** | 容器此前仅单独挂载了 `bin` 目录，未挂载宿主机的 `static/games/img` 和 `static/games/games.json`。 | 重新启动容器并补全 `-v .../static/games/img:/app/static/games/img:ro` 与 `-v .../static/games/games.json:/app/static/games/games.json:ro` 目录映射。 |
 | **上游 Web 仓库归档导致 PR 2~5 提交受阻** | 上游 `rwv/chinese-dos-games-web` 设为只读 Public Archive，无法创建 PR。 | 转为维护 `GotBearHeart/chinese-dos-games-web` 作为社区增强版，主干合并特性并配置多架构 Docker 自动构建。 |
+| **换电脑/跨设备后《仙剑奇侠传》等游戏存档未同步** | W3C 标准对浏览器 `sendBeacon` / `keepalive` 设死 64KB 内存配额，仙剑等双存档（~180KB）在切页/退出时被浏览器静默丢弃；且原 180s 轮询周期过长导致退出前未及常规上传。 | 1. 植入底层 FS 写入拦截钩子（1.5s 防抖无体积限制常规 `fetch`，存盘即刻秒级落盘 NAS）；<br>2. 缩短哈希轮询至 15s；<br>3. 规避失效 beacon；<br>4. 从本机 IndexedDB Blob 库抢救恢复物理存盘补齐至 NAS。 |
 
 ---
 
