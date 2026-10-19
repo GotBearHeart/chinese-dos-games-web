@@ -82,10 +82,33 @@ function toggleCRT() {
     }
 }
 
-// === Cloud Save Synchronization Engine (180s Periodic + Exit + Manual) ===
+// === Cloud Save Synchronization Engine (Write Hook + 15s Fast Polling + Manual) ===
 
 var _lastUploadedSignature = '';
 var _isSyncing = false;
+var _saveDebounceTimer = null;
+
+// Invoked directly from loader.js when deltaFS.writeFileSync or unlinkSync is called
+window._triggerCloudSaveDebounced = function(filePath) {
+    if (window._isRestoringCloudSaves) return;
+
+    if (_saveDebounceTimer) {
+        clearTimeout(_saveDebounceTimer);
+    }
+
+    var syncBtn = document.getElementById('cloud_sync_btn');
+    if (syncBtn && !_isSyncing) {
+        syncBtn.value = "☁️ 存盘写入，即将同步...";
+        syncBtn.classList.remove('btn-outline-success', 'btn-outline-secondary');
+        syncBtn.classList.add('btn-outline-warning');
+    }
+
+    _saveDebounceTimer = setTimeout(function() {
+        _saveDebounceTimer = null;
+        console.log("[CloudSave] File system write detected (" + filePath + "), auto-syncing to NAS...");
+        syncSavesToNAS(false, false);
+    }, 1500);
+};
 
 function collectDeltaFiles(fs, dir) {
     var files = {};
@@ -117,7 +140,7 @@ function collectDeltaFiles(fs, dir) {
 }
 
 function syncSavesToNAS(isKeepalive, isForce) {
-    if (!window._dos_deltaFS || !window._dos_game_key) return;
+    if (!window._dos_deltaFS || !window._dos_game_key || window._isRestoringCloudSaves) return;
     if (_isSyncing && !isKeepalive) return;
 
     var files = collectDeltaFiles(window._dos_deltaFS, '/');
@@ -145,17 +168,25 @@ function syncSavesToNAS(isKeepalive, isForce) {
     var apiUrl = '/api/saves/' + encodeURIComponent(window._dos_game_key);
 
     try {
-        if (isKeepalive && navigator.sendBeacon) {
+        // W3C sendBeacon and keepalive fetch have a strict 64KB quota.
+        // If payload is <= 60000 bytes, sendBeacon is safe to use on exit.
+        if (isKeepalive && navigator.sendBeacon && payload.length <= 60000) {
             var blob = new Blob([payload], { type: 'application/json' });
-            navigator.sendBeacon(apiUrl, blob);
-            _lastUploadedSignature = signature;
+            var beaconSent = navigator.sendBeacon(apiUrl, blob);
+            if (beaconSent) {
+                _lastUploadedSignature = signature;
+            }
             _isSyncing = false;
             return;
         }
 
+        // For active sessions, standard fetch has NO 64KB limit and uploads full saves reliably.
+        // Note: Do NOT set keepalive: true if payload > 60KB because Chromium throws TypeError.
+        var useKeepalive = !!isKeepalive && payload.length <= 60000;
+
         fetch(apiUrl, {
             method: 'POST',
-            keepalive: !!isKeepalive,
+            keepalive: useKeepalive,
             headers: { 'Content-Type': 'application/json' },
             body: payload
         }).then(function(res) {
@@ -172,12 +203,19 @@ function syncSavesToNAS(isKeepalive, isForce) {
                     syncBtn.classList.add('btn-outline-success');
                 }
                 console.log("[CloudSave] Synced " + data.saved_count + " files to NAS at " + timeStr);
+            } else {
+                if (syncBtn && !isKeepalive) {
+                    syncBtn.value = "☁️ 存档同步失败";
+                    syncBtn.classList.remove('btn-outline-success');
+                    syncBtn.classList.add('btn-outline-warning');
+                }
             }
         }).catch(function(err) {
             _isSyncing = false;
             console.warn("[CloudSave] Sync failed:", err);
             if (syncBtn && !isKeepalive) {
                 syncBtn.value = "☁️ 存档同步失败";
+                syncBtn.classList.remove('btn-outline-success');
                 syncBtn.classList.add('btn-outline-warning');
             }
         });
@@ -217,10 +255,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 180 秒（3 分钟）周期自动检查与上传
+    // 15 秒轻量周期自动检查与保底上传（仅哈希比对，无实质 CPU 开销）
     setInterval(function() {
         syncSavesToNAS(false, false);
-    }, 180000);
+    }, 15000);
 });
 
 document.addEventListener('fullscreenchange', function() {

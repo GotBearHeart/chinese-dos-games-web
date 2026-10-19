@@ -1230,6 +1230,32 @@ var Module = null;
                           window._dos_deltaFS = deltaFS;
                           window._dos_game_key = "fileSystemKey" in _game_data ? _game_data.fileSystemKey : null;
 
+                          // Hook deltaFS write/unlink for real-time save detection
+                          if (deltaFS && typeof deltaFS.writeFileSync === 'function') {
+                            var _origWriteFileSync = deltaFS.writeFileSync.bind(deltaFS);
+                            deltaFS.writeFileSync = function(p, data, flag, mode) {
+                              var res = _origWriteFileSync(p, data, flag, mode);
+                              try {
+                                if (typeof window !== 'undefined' && typeof window._triggerCloudSaveDebounced === 'function') {
+                                  window._triggerCloudSaveDebounced(p);
+                                }
+                              } catch (we) {}
+                              return res;
+                            };
+                          }
+                          if (deltaFS && typeof deltaFS.unlinkSync === 'function') {
+                            var _origUnlinkSync = deltaFS.unlinkSync.bind(deltaFS);
+                            deltaFS.unlinkSync = function(p) {
+                              var res = _origUnlinkSync(p);
+                              try {
+                                if (typeof window !== 'undefined' && typeof window._triggerCloudSaveDebounced === 'function') {
+                                  window._triggerCloudSaveDebounced(p);
+                                }
+                              } catch (ue) {}
+                              return res;
+                            };
+                          }
+
                           // Any file system writes to MountableFileSystem will be written to the
                           // deltaFS, letting us mount read-only zip files into the MountableFileSystem
                           // while being able to "write" to them.
@@ -1290,6 +1316,7 @@ var Module = null;
                                 promises.push(
                                   new Promise(function(resolveCloud) {
                                     try {
+                                      window._isRestoringCloudSaves = true;
                                       window.fetch('/api/saves/' + encodeURIComponent(game_data.fileSystemKey))
                                         .then(function(res) { if (res && res.ok) return res.json(); return null; })
                                         .then(function(data) {
@@ -1321,13 +1348,16 @@ var Module = null;
                                               console.log('[CloudSave] Successfully restored ' + count + ' save files from NAS for', game_data.fileSystemKey);
                                             }
                                           }
+                                          window._isRestoringCloudSaves = false;
                                           resolveCloud();
                                         })
                                         .catch(function(err) {
+                                          window._isRestoringCloudSaves = false;
                                           console.warn('[CloudSave] Cloud save fetch error (ignored):', err);
                                           resolveCloud();
                                         });
                                     } catch (outerErr) {
+                                      window._isRestoringCloudSaves = false;
                                       console.warn('[CloudSave] Outer error (ignored):', outerErr);
                                       resolveCloud();
                                     }

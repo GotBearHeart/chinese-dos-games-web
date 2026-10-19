@@ -17,7 +17,7 @@
                             <div id='controls'>
                                 <span><input id="favorite_btn" class="btn {% if is_favorite %}btn-warning text-dark font-weight-bold{% else %}btn-outline-warning{% endif %}" type="button" value="{% if is_favorite %}★ 已收藏{% else %}☆ 收藏{% endif %}" onclick="toggleFavoriteGame();" title="收藏此游戏至 NAS 我的收藏"></span>
                                 <span><input id="cloud_sync_btn" class="btn btn-outline-success" type="button" value="☁️ 云存档: 就绪"
-                                             onclick="manualSyncSaves();" title="每 180 秒及离开页面时自动同步至 NAS，点击可手动同步"></span>
+                                             onclick="manualSyncSaves();" title="游戏内存盘时自动即时同步至 NAS，每 15 秒自动巡检，点击可立即手动同步"></span>
                                 <span><input id="crt_toggle_btn" class="btn btn-info" type="button" value="CRT 滤镜: 开"
                                              onclick="toggleCRT();"></span>
                                 <span><input class="btn btn-light" type="button" value="网页全屏"
